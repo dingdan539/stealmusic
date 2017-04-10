@@ -1,81 +1,91 @@
 # -*- coding:utf-8 -*-
-import urllib
-import urllib2
-import json
-import md5
+import wx
+import wx.grid
+
+import process.music as music
 
 
-def encrypted_id(_id):
-    byte1 = bytearray('3go8&$8*3*3h0k(2)2')
-    byte2 = bytearray(_id)
-    byte1_len = len(byte1)
-    for i in xrange(len(byte2)):
-        byte2[i] = byte2[i] ^ byte1[i % byte1_len]
-    m = md5.new()
-    m.update(byte2)
-    result = m.digest().encode('base64')[:-1]
-    result = result.replace('/', '_')
-    result = result.replace('+', '-')
-    return result
+class GridData(wx.grid.PyGridTableBase):
+    _highlighted = set()
+
+    def __init__(self, cols, data):
+        super(GridData, self).__init__()
+        self._cols = cols
+        self._data = data
+
+    def GetColLabelValue(self, col):
+        return self._cols[col]
+
+    def GetNumberRows(self):
+        return len(self._data)
+
+    def GetNumberCols(self):
+        return len(self._cols)
+
+    def GetValue(self, row, col):
+        return self._data[row][col]
+
+    def SetValue(self, row, col, val):
+        self._data[row][col] = val
+
+    def GetAttr(self, row, col, kind):
+        attr = wx.grid.GridCellAttr()
+        attr.SetBackgroundColour(wx.GREEN if row in self._highlighted else wx.WHITE)
+        return attr
+
+    def set_value(self, row, col, val):
+        self._highlighted.add(row)
+        self.SetValue(row, col, val)
 
 
-class Util(object):
-    @staticmethod
-    def request(url):
-        req = urllib2.Request(url)
-        response = urllib2.urlopen(req)
-        return response.read()
+class Frame(wx.Frame):
+    def __init__(self, parent, title):
+        self.music_instance = music.StealMusic()
+        wx.Frame.__init__(self, None, -1, title, size=(1000, 500))
+        self.panel = wx.Panel(self)
+        self.text = wx.TextCtrl(self.panel, -1, value='', pos=(400, 10), size=(200, 30))
+        self.button = wx.Button(self.panel, -1, label=u'搜索', pos=(610, 10), size=(60, 30))
 
-    @staticmethod
-    def get(url):
-        return Util.request(url)
+        self.Bind(wx.EVT_BUTTON, self.search)
+        # self.Bind(wx.EVT_TEXT, self.search, self.text)
 
-    @staticmethod
-    def download(url, local):
-        urllib.urlretrieve(url, local, Util.schedule)
+    def init_grid(self, _cols, _data):
+        self.data = GridData(_cols, _data)
+        self.grid = wx.grid.Grid(self.panel, pos=(100, 60), size=(800, 300))
+        self.grid.SetTable(self.data)
+        self.grid.SetColSize(0, 150)
+        self.grid.SetColSize(1, 568)
 
-    @staticmethod
-    def schedule(a, b, c):
-        per = 100.0 * a * b / c
-        if per > 100:
-            per = 100
-        print '%.2f%%' % per
-
-
-class StealMusic(object):
-    detail_api = "http://music.163.com/api/song/detail/?ids=[xx]"
-    download_api = "http://m2.music.126.net/xx1/xx2.mp3"
-
-    def get_mp3(self, songid):
-        mp3_list = []
+    def search(self, event):
         try:
-            response = Util.get(self.detail_api.replace("xx", str(songid)))
-            response = json.loads(response)
-            songs = response['songs']
-            if songs:
-                for i in songs:
-                    h_music = i['hMusic']
-                    dfsid = str(h_music['dfsId'])
-                    mp3url = self.download_api.replace("xx1", encrypted_id(dfsid)).replace("xx2", dfsid)
-                    mp3_list.append({
-                        'mp3url': mp3url,
-                        'name': i['name']
-                    })
+            search_value = self.text.GetValue()
+            data = self.music_instance.get_album_list(search_value)
+
+            _data = []
+            if data:
+                for i in data:
+                    _data.append(
+                        [i['name'], i['artist_name']]
+                    )
+
+            _cols = [u'类型', u'内容']
+            _data = _data
+
+            self.init_grid(_cols, _data)
+            # self.data.set_value(2, 0, "x")
 
         except Exception, e:
-            print Exception, ":", e.message
-
-        finally:
-            return mp3_list
-
-    def down_music(self, songid):
-        mp3_list = self.get_mp3(songid)
-        local = "./downloads/"
-        for i in mp3_list:
-            mp3url = i['mp3url']
-            name = i['name']
-            temp_local = local + name + '.mp3'
-            Util.download(mp3url, temp_local)
+            pass
 
 
-StealMusic().down_music(445845796)
+class App(wx.App):
+    def OnInit(self):
+        self.frame = Frame(parent=None, title=u'dINgGoMusiC(偷音乐)')
+        self.frame.Show()
+        self.SetTopWindow(self.frame)
+        return True
+
+if __name__ == "__main__":
+    app = App()
+    app.MainLoop()
+    # music.StealMusic().down_music(445845796)

@@ -2,6 +2,7 @@
 import json
 import os
 import md5
+import re
 from util.common import Util
 
 
@@ -23,6 +24,7 @@ class StealMusic(object):
     detail_api = "http://music.163.com/api/song/detail/?ids=[xx]"
     download_api = "http://m2.music.126.net/xx1/xx2.mp3"
     search_api = "http://music.163.com/api/search/get/"
+    album_detail_api = "http://music.163.com/m/album?id="
 
     def get_mp3(self, songid):
         mp3_list = []
@@ -46,7 +48,7 @@ class StealMusic(object):
         finally:
             return mp3_list
 
-    def search(self, s, _type=10, limit=5, offset=0):
+    def search(self, s, _type=10, limit=15, offset=0):
         """1 单曲 10 专辑 100 歌手 1000 歌单 1002 用户"""
         result = Util.post(self.search_api, {
             's': s,
@@ -74,6 +76,22 @@ class StealMusic(object):
                     'artist_name': artist_name
                 })
         return data
+
+    def get_album_html(self, album_id):
+        url = self.album_detail_api + str(album_id)
+        return Util.get(url)
+
+    def get_song_ids(self, album_id):
+        html = self.get_album_html(album_id)
+        songids = []
+        songids = re.findall(r"/song\?id=(\d+)", html)
+        return songids
+
+    def down_album(self, album_id):
+        songids = self.get_song_ids(album_id)
+        if songids:
+            for i in songids:
+                self.down_music(i)
 
     def down_music(self, songid):
         mp3_list = self.get_mp3(songid)
